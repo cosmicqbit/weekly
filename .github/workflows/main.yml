@@ -2,39 +2,45 @@ name: Sync Fork and Notify
 
 on:
   schedule:
-    - cron: '30 22 * * *' # Runs daily at 04:00 AM IST (converted to 10:30 PM UTC)
-  workflow_dispatch: # Allows manual trigger
+    - cron: '30 22 * * *' # Runs daily at 04:00 AM IST (10:30 PM UTC)
+  workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
-      # Step 1: Checkout the forked repository
+      # Step 1: Checkout Fork with Full History
       - name: Checkout Fork
         uses: actions/checkout@v2
         with:
-          ref: main # Replace with your default branch if different
+          fetch-depth: 0
 
-      # Step 2: Add the upstream repository and fetch updates
+      # Step 2: Debug Git Remotes (Optional)
+      - name: Debug Git Remotes
+        run: git remote -v
+
+      # Step 3: Set Upstream and Fetch Updates with Retry Logic
       - name: Set Upstream and Fetch Updates
         run: |
-          git remote add upstream https://github.com/ruanyf/weekly.git
-          git fetch upstream
+          git remote add upstream https://github.com/ruanyf/weekly.git || true
+          for i in {1..3}; do
+            git fetch upstream || sleep 10;
+          done
 
-      # Step 3: Merge updates from the upstream repository into the fork
+      # Step 4: Merge Updates from Upstream into Fork
       - name: Merge Updates
         id: merge
         run: |
           git checkout main
           git merge upstream/main --ff-only || echo "No new updates to merge"
 
-      # Step 4: Push changes back to the forked repository
+      # Step 5: Push Changes Back to Fork if Merged Successfully
       - name: Push Changes to Fork
         if: success() && steps.merge.outcome == 'success'
-        run: |
-          git push origin main
+        run: git push origin main
 
-      # Step 5: Notify via Telegram bot
+      # Step 6: Notify via Telegram Bot if Sync Successful
       - name: Notify Telegram Bot
         if: success() && steps.merge.outcome == 'success'
         env:

@@ -35,12 +35,35 @@ jobs:
           git checkout ${{ env.default_branch }}
           git merge upstream/${{ env.default_branch }} --ff-only || echo "No new updates to merge"
 
-      # Step 5: Push Changes Back to Fork if Merged Successfully
+      # Step 5: Detect New Files in ./docs/
+      - name: Detect New Files in ./docs/
+        id: detect_new_files
+        run: |
+          git diff --name-status HEAD^ HEAD | grep "^A" | awk '{print $2}' | grep "^docs/" || echo "" > new_files.txt
+          NEW_FILES=$(cat new_files.txt)
+          echo "new_files=$NEW_FILES" >> $GITHUB_ENV
+
+      # Step 6: Push Changes Back to Fork if Merged Successfully
       - name: Push Changes to Fork
         if: success()
         run: git push origin ${{ env.default_branch }}
 
-      # Step 6: Notify via Telegram Bot if Sync Successful
+      # Step 7: Upload New Files to Telegram (if any)
+      - name: Upload New Files to Telegram
+        if: env.new_files != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          for FILE in ${{ env.new_files }}; do
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F document=@"$FILE" \
+              -F caption="*📝 New Issue Released!*" \
+              -F parse_mode="Markdown"
+          done
+
+      # Step 8: Notify via Telegram Bot if Sync Successful (General Notification)
       - name: Notify Telegram Bot
         if: success()
         env:

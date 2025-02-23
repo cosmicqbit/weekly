@@ -1,0 +1,76 @@
+name: Sync Fork and Notify
+
+on:
+  schedule:
+    - cron: '30 22 * * *' # Runs daily at 04:00 AM IST (10:30 PM UTC)
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout Fork with Full History
+      - name: Checkout Fork
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      # Step 2: Add Upstream Repository and Fetch Updates
+      - name: Add Upstream and Fetch Updates
+        run: |
+          git remote add upstream https://github.com/ruanyf/weekly.git || true
+          git fetch upstream
+
+      # Step 3: Detect Default Branch of Upstream Repository
+      - name: Detect Default Branch
+        id: default_branch
+        run: |
+          DEFAULT_BRANCH=$(git remote show upstream | grep 'HEAD branch' | awk '{print $NF}')
+          echo "default_branch=$DEFAULT_BRANCH" >> $GITHUB_ENV
+
+      # Step 4: Checkout Default Branch and Merge Updates
+      - name: Checkout and Merge Updates
+        run: |
+          git checkout ${{ env.default_branch }}
+          git merge upstream/${{ env.default_branch }} --ff-only || echo "No new updates to merge"
+
+      # Step 5: Detect New Files in ./docs/
+      - name: Detect New Files in ./docs/
+        id: detect_new_files
+        run: |
+          git diff --name-status HEAD^ HEAD | grep "^A" | awk '{print $2}' | grep "^docs/" || echo "" > new_files.txt
+          NEW_FILES=$(cat new_files.txt)
+          echo "new_files=$NEW_FILES" >> $GITHUB_ENV
+
+      # Step 6: Push Changes Back to Fork if Merged Successfully
+      - name: Push Changes to Fork
+        if: success()
+        run: git push origin ${{ env.default_branch }}
+
+      # Step 7: Upload New Files to Telegram (if any)
+      - name: Upload New Files to Telegram
+        if: env.new_files != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          for FILE in ${{ env.new_files }}; do
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F document=@"$FILE" \
+              -F caption="*📝 New Issue Released!*" \
+              -F parse_mode="Markdown"
+          done
+
+      # Step 8: Notify via Telegram Bot if Sync Successful (General Notification)
+      - name: Notify Telegram Bot
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          LATEST_COMMIT=$(git log -1 --pretty=format:"%s")
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="✅ Sync completed! Latest commit message: ${LATEST_COMMIT}"

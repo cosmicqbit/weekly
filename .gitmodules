@@ -1,0 +1,6 @@
+[submodule "themes/hugo-simple"]
+	path = themes/hugo-simple
+	url = https://github.com/maolonglong/hugo-simple.git
+[submodule "site/themes/hugo-simple"]
+	path = site/themes/hugo-simple
+	url = https://github.com/maolonglong/hugo-simple.git

@@ -1,0 +1,44 @@
+name: Build and Deploy Hugo Site
+
+on:
+  push:
+    paths:
+      - docs/** # Trigger only when files under /docs/ are updated
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Python environment
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      # Step 3: Run Python Script to Process Markdown Files
+      - name: Add Front Matter and Copy Files
+        run: |
+          python3 add_front_matter.py
+
+      # Step 4: Set up Hugo environment
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: "latest"
+
+      # Step 5: Build Hugo Site
+      - name: Build Site with Hugo
+        run: |
+          cd site && hugo --gc --minify
+
+      # Step 6: Deploy Hugo Site to GitHub Pages (gh-pages branch)
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site/public/

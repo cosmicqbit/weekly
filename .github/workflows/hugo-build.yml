@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - docs/** # Trigger only when files under /docs/ are updated
+  workflow_dispatch: # Allow manual triggering of the workflow
 
 jobs:
   build-and-deploy:

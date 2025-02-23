@@ -1,0 +1,47 @@
+name: Sync Fork and Notify
+
+on:
+  schedule:
+    - cron: '30 22 * * *' # Runs daily at 04:00 AM IST (converted to 10:30 PM UTC)
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout the forked repository
+      - name: Checkout Fork
+        uses: actions/checkout@v2
+        with:
+          ref: main # Replace with your default branch if different
+
+      # Step 2: Add the upstream repository and fetch updates
+      - name: Set Upstream and Fetch Updates
+        run: |
+          git remote add upstream https://github.com/ruanyf/weekly.git
+          git fetch upstream
+
+      # Step 3: Merge updates from the upstream repository into the fork
+      - name: Merge Updates
+        id: merge
+        run: |
+          git checkout main
+          git merge upstream/main --ff-only || echo "No new updates to merge"
+
+      # Step 4: Push changes back to the forked repository
+      - name: Push Changes to Fork
+        if: success() && steps.merge.outcome == 'success'
+        run: |
+          git push origin main
+
+      # Step 5: Notify via Telegram bot
+      - name: Notify Telegram Bot
+        if: success() && steps.merge.outcome == 'success'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          LATEST_COMMIT=$(git log -1 --pretty=format:"%s")
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="✅ Sync completed! Latest commit message: ${LATEST_COMMIT}"
